@@ -19,6 +19,7 @@ const (
 var (
 	debug     *bool                // true => TRACE logging on
 	isServer  *bool                // true => start server daemon
+	force     *bool                // true => force setup even if server already active
 	name      string               // name of server or job
 	zkServer  string               // Zookeeper server
 	zkTimeout = DEFAULT_ZK_TIMEOUT // Zookeeper session timeout
@@ -27,13 +28,14 @@ var (
 func init() {
 	debug = flag.Bool("d", false, "Specifies whether to provide TRACE logging")
 	isServer = flag.Bool("s", false, "Specifies whether to run as a castle-cron server daemon")
+	force = flag.Bool("f", false, "Force setup even if server is already active")
 	flag.StringVar(&name, "n", "", "Name of server or job; %h->hostname; %p->pid")
 	flag.StringVar(&zkServer, "zk", "ZOOKEEPER_SERVERS", "Comma-separated list of Zookeeper server(s) in form host:port")
 	flag.IntVar(&zkTimeout, "zt", DEFAULT_ZK_TIMEOUT, "Zookeeper session timeout in seconds")
 }
 
 func usage() {
-	fmt.Printf("Usage: castle-cron [-d] [-zk server:port] [-zt timeout]\n")
+	fmt.Printf("Usage: castle-cron [-d] [-f] [-s] [-n name] [-zk server:port] [-zt timeout]\n")
 	flag.PrintDefaults()
 	os.Exit(2)
 }
@@ -48,15 +50,17 @@ func main() {
 		usage()
 	}
 
-	// Initialize cron server
+	// Connect to Zookeeper and initialize for this run
 
-	if e := cron.Init(name, zkServer, zkTimeout); e != nil {
+	if e := cron.Init(zkServer, zkTimeout); e != nil {
 		log.Error.Fatalf("Unable to connect to Zookeeper: %s", e.Error())
 	} else {
 		defer cron.Stop()
 		log.Info.Printf("Connected to Zookeeper server %s with session timeout %d seconds", zkServer, zkTimeout)
 	}
-
+	if *isServer {
+		cron.Run(name, *force)
+	}
 }
 
 func overrideFromEnv(value *string, envname string) {
