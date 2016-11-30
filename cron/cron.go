@@ -23,16 +23,6 @@ var (
 	isRunning  bool // Server is running
 )
 
-type Job struct {
-	Name        string    // Name of this job
-	Cmd         string    // Command to run
-	NextRuntime time.Time // Time of next execution
-	Hour        []int     // Hour to run
-	Minute      []int     // Minute to run
-	Month       []int     // Month to run
-	Weekday     []int     // Weekday to run
-}
-
 // Connect to Zookeeper
 func Init(server string, timeout int) (e error) {
 	if zkConn != nil {
@@ -68,6 +58,7 @@ func Run(name string, force bool) {
 	reportServers()
 	isRunning = true
 	for isRunning {
+		runNextJob()
 		log.Info.Printf("castle-cron server %s still running", serverName)
 		time.Sleep(time.Duration(10) * time.Second)
 	}
@@ -75,6 +66,7 @@ func Run(name string, force bool) {
 
 // Create Zookeeper znode /servers/<serverName>
 func setServerName(name string, force bool) error {
+	createIfNecessary(PATH_SERVERS)
 	if name == "" {
 		serverName = hostname
 	} else {
@@ -160,4 +152,15 @@ func reportServers() error {
 		}
 	}()
 	return nil
+}
+
+// Check whether a specified znode exists and create if it does not
+func createIfNecessary(znode string) {
+	if exists, _, err := zkConn.Exists(znode); err != nil {
+		log.Error.Fatalf("Unable to check for %s: %s", znode, err.Error())
+	} else if !exists {
+		if _, err = zkConn.Create(znode, []byte{}, 0x0, zk.WorldACL(zk.PermAll)); err != nil {
+			log.Error.Fatalf("Unable to create %s: %s", znode, err.Error())
+		}
+	}
 }
