@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/tooda02/castle-cron/cli"
 	"github.com/tooda02/castle-cron/cron"
 	log "github.com/tooda02/castle-cron/logging"
 )
@@ -70,7 +71,7 @@ func main() {
 	// If non-flag arguments were specified, maintain the jobs list
 
 	if flag.NArg() > 0 {
-		cron.RunJobMaintenanceCommand()
+		cli.RunCommand()
 	}
 
 	// If -s was specified, run a castle-cron server

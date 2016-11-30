@@ -39,11 +39,13 @@ func runNextJob() error {
 
 		jobData, _, watch, err := zkConn.GetW(PATH_NEXT_JOB)
 		if err != nil {
+			releaseJobsLock()
 			return fmt.Errorf("Unable to retrieve next job: %s", err.Error())
 		}
 		now := time.Now()
 		job, err := Deserialize(jobData)
 		if err != nil {
+			releaseJobsLock()
 			return fmt.Errorf("Unable to decode next job: %s", err.Error())
 		}
 
@@ -51,12 +53,8 @@ func runNextJob() error {
 		//    execution time or an update to the schedule for the next job.
 
 		if job.NextRuntime.After(now) {
-			if hasLock {
-				log.Trace.Printf("Releasing %s lock", PATH_NEXT_JOB)
-				if err := lock.Unlock(); err != nil {
-					return fmt.Errorf("Unable to release %s lock: %s", PATH_NEXT_JOB, err.Error())
-				}
-				hasLock = false
+			if err = releaseJobsLock(); err != nil {
+				return err
 			}
 			select {
 			case evt := <-watch:
@@ -73,12 +71,9 @@ func runNextJob() error {
 		// 4. Once the lock is granted, continue to request the next job again.
 
 		if !hasLock {
-			log.Trace.Printf("Requesting %s lock", PATH_NEXT_JOB)
-			if err := lock.Lock(); err != nil {
-				return fmt.Errorf("Unable to get %s lock: %s", PATH_NEXT_JOB, err.Error())
+			if err := getJobsLock(); err != nil {
+				return err
 			}
-			log.Trace.Printf("Taking %s lock", PATH_NEXT_JOB)
-			hasLock = true
 			continue
 		}
 
@@ -101,7 +96,7 @@ func runNextJob() error {
 // Reschedule current job and set the next scheduled job in /jobsnext
 // This function releases the /jobs lock; the caller is responsible for obtaining it.
 func updateSchedule(job *Job) error {
-	defer unlock()
+	defer releaseJobsLock()
 
 	// Update the next run time of the job we just ran
 
@@ -137,11 +132,24 @@ func updateSchedule(job *Job) error {
 		}
 	}
 
-	return unlock() // Explicit unlock to ensure logging of any error
+	return releaseJobsLock() // Explicit unlock to ensure logging of any error
+}
+
+// Grab the lock if we don't already have it
+func getJobsLock() error {
+	if !hasLock {
+		log.Trace.Printf("Requesting %s lock", PATH_NEXT_JOB)
+		if err := lock.Lock(); err != nil {
+			return fmt.Errorf("Unable to get %s lock: %s", PATH_NEXT_JOB, err.Error())
+		}
+		log.Trace.Printf("Taking %s lock", PATH_NEXT_JOB)
+		hasLock = true
+	}
+	return nil
 }
 
 // Release the lock if we have it
-func unlock() error {
+func releaseJobsLock() error {
 	if hasLock {
 		log.Trace.Printf("Releasing %s lock", PATH_NEXT_JOB)
 		if err := lock.Unlock(); err != nil {

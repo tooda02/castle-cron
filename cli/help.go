@@ -1,4 +1,4 @@
-package cron
+package cli
 
 import (
 	"flag"
@@ -8,71 +8,6 @@ import (
 
 	//log "github.com/tooda02/castle-cron/logging"
 )
-
-/*
-Run a job maintenance command of the form castle-cron add|upd|del|list jobname \"schedule\" cmd args...
-*/
-func RunJobMaintenanceCommand() error {
-	switch flag.Arg(0) {
-	case "add":
-		return AddCommand()
-
-	case "del":
-		return DelCommand()
-
-	case "help":
-		return HelpCommand()
-
-	case "list":
-		return ListCommand()
-
-	case "upd":
-		return UpdCommand()
-	}
-	return fmt.Errorf("Unknown command \"%s\"; must be add, del, help, list, or upd", flag.Arg(0))
-}
-
-func AddCommand() error {
-	if job, err := parseAddOrUpdArgs(); err != nil {
-		return err
-	} else if err = job.WriteToZk() {
-		return err
-	}
-	return nil
-}
-
-func UpdCommand() error {
-	if job, err := parseAddOrUpdArgs(); err != nil {
-		return err
-	} else if err = job.UpdateZk() {
-		return err
-	}
-	return nil
-}
-
-func parseAddOrUpdArgs() (job *Job, e error) {
-	job = &Job{}
-	if flag.NArg() < 4 {
-		e = fmt.Errorf("Not enough arguments for %s subcommand", flag.Arg(0))
-	} else {
-		job.Name = flag.Arg(1)
-		job.Schedule = flag.Arg(2)
-		job.Cmd = flag.Arg(3)
-		if flag.NArg() > 4 {
-			job.Args = flag.Args()[4:]
-		}
-		_, e = job.SetNextRuntime()
-	}
-	return
-}
-
-func DelCommand() error {
-	return nil
-}
-
-func ListCommand() error {
-	return nil
-}
 
 func HelpCommand() error {
 	switch flag.Arg(1) {

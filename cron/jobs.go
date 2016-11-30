@@ -87,6 +87,12 @@ func (job *Job) Serialize() (b []byte, e error) {
 
 // Update job in znode /jobs/<jobname>
 func (job *Job) UpdateZk() (e error) {
+	if !hasLock {
+		if err := getJobsLock(); err != nil {
+			return err
+		}
+		defer releaseJobsLock()
+	}
 	if b, err := job.Serialize(); err != nil {
 		e = err
 	} else if _, err = zkConn.Set(fmt.Sprintf("%s/%s", PATH_JOBS, job.Name), b, -1); err != nil {
@@ -97,6 +103,12 @@ func (job *Job) UpdateZk() (e error) {
 
 // Write new job to znode /jobs/<jobname>
 func (job *Job) WriteToZk() (e error) {
+	if !hasLock {
+		if err := getJobsLock(); err != nil {
+			return err
+		}
+		defer releaseJobsLock()
+	}
 	if b, err := job.Serialize(); err != nil {
 		e = err
 	} else if _, err = zkConn.Create(fmt.Sprintf("%s/%s", PATH_JOBS, job.Name), b, 0x0, zk.WorldACL(zk.PermAll)); err != nil {
