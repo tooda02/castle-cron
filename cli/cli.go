@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ryanuber/columnize"
 	"github.com/tooda02/castle-cron/cron"
+	log "github.com/tooda02/castle-cron/logging"
 )
 
 /*
@@ -38,7 +40,9 @@ func RunCommand(args []string) error {
 func AddCommand(args []string) (e error) {
 	var job *cron.Job
 	if job, e = buildJobFromArgs(args); e == nil {
-		e = job.WriteToZk()
+		if e = job.WriteToZk(); e == nil {
+			printJobs([]*cron.Job{job})
+		}
 	}
 	return
 }
@@ -47,7 +51,9 @@ func AddCommand(args []string) (e error) {
 func UpdCommand(args []string) (e error) {
 	var job *cron.Job
 	if job, e = buildJobFromArgs(args); e == nil {
-		e = job.UpdateZk()
+		if e = job.UpdateZk(); e == nil {
+			printJobs([]*cron.Job{job})
+		}
 	}
 	return
 }
@@ -74,9 +80,11 @@ func DelCommand(args []string) (e error) {
 		e = fmt.Errorf("Job name not supplied for %s subcommand", args[0])
 	} else {
 		job := cron.Job{Name: args[1]}
-		e = job.DeleteFromZk()
+		if e = job.DeleteFromZk(); e == nil {
+			log.Plain.Printf("Job %s deleted", job.Name)
+		}
 	}
-	return nil
+	return
 }
 
 // List a job or all jobs
@@ -87,22 +95,30 @@ func ListCommand(args []string) error {
 	}
 	if jobs, err := cron.ListJobs(name); err != nil {
 		return err
+	} else if len(jobs) == 0 {
+		fmt.Printf("No jobs found\n")
 	} else {
-		output := []string{
-			"Name | Next Runtime | Error | Command",
-		}
-		for _, job := range jobs {
-			errFlag := ""
-			if job.HasError {
-				errFlag = "Err"
-			}
-			output = append(output,
-				job.Name+" | "+
-					job.NextRuntime.Format("2006-01-02 15:04:05.99999999")+" | "+
-					errFlag+" | "+
-					job.Cmd+" "+strings.Join(job.Args, " "))
-		}
-		fmt.Println(output)
+		printJobs(jobs)
 	}
 	return nil
+}
+
+// Print a formatted list of jobs
+func printJobs(jobs []*cron.Job) {
+	output := []string{
+		"Name | Next Runtime | Error | Command",
+	}
+	for _, job := range jobs {
+		errFlag := ""
+		if job.HasError {
+			errFlag = "Err"
+		}
+		output = append(output,
+			job.Name+" | "+
+				job.NextRuntime.Format("2006-01-02 15:04:05.99999999")+" | "+
+				errFlag+" | "+
+				job.Cmd+" "+strings.Join(job.Args, " "))
+	}
+	result := columnize.SimpleFormat(output)
+	log.Plain.Printf(result)
 }

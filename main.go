@@ -65,7 +65,7 @@ func main() {
 		log.Error.Fatalf("Unable to connect to Zookeeper: %s", err.Error())
 	} else {
 		defer cron.Stop()
-		log.Info.Printf("Connected to Zookeeper server %s with session timeout %d seconds", zkServer, zkTimeout)
+		log.Trace.Printf("Connected to Zookeeper server %s with session timeout %d seconds", zkServer, zkTimeout)
 	}
 
 	// If non-flag arguments were specified, execute the CLI command

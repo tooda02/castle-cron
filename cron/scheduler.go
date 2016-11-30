@@ -11,15 +11,16 @@ import (
 const (
 	PATH_JOBS     = "/jobs"
 	PATH_NEXT_JOB = "/nextjob"
+	PATH_JOBLOCK = "/joblock"
 )
 
 var (
-	lock    = zk.NewLock(zkConn, PATH_JOBS, zk.WorldACL(zk.PermAll))
-	hasLock bool // true => We have acquired the lock
+	lock *zk.Lock // Lock for /jobs
+	hasLock bool  // true => We have acquired the lock
 )
 
 /*
-Schedule and run the next job.  We do the following:
+Schedule and run jobs.  We do the following:
 1. Retrieve the next job scheduled from znode /nextjob and set a watch.
 2. If the job's execution time is in the future, set a timer and wait
    for either timer expiration or the watch event, and return to step 1.
@@ -30,9 +31,7 @@ Schedule and run the next job.  We do the following:
 6. Determine the next job to schedule and update /nextjob
 7. Release the lock and return to step 1.
 */
-func runNextJob() error {
-	createIfNecessary(PATH_JOBS)
-	createIfNecessary(PATH_NEXT_JOB)
+func runJobs() error {
 	for isRunning {
 
 		// 1. Retrieve the next scheduled job.  This is always in /nextjob
@@ -108,6 +107,8 @@ func updateSchedule(job *Job) error {
 		job.HasError = true
 	} else if err = job.UpdateZk(); err != nil {
 		return err
+	} else {
+		log.Info.Printf("Job %s next run time %s", job.Name, job.NextRuntime.Format("2006-01-02 15:04:05.99999999"))
 	}
 
 	// Determine runtime of the next job in the schedule and update /jobsnext
@@ -138,11 +139,11 @@ func updateSchedule(job *Job) error {
 // Grab the lock if we don't already have it
 func getJobsLock() error {
 	if !hasLock {
-		log.Trace.Printf("Requesting %s lock", PATH_NEXT_JOB)
+		log.Trace.Printf("Requesting %s lock", PATH_JOBLOCK)
 		if err := lock.Lock(); err != nil {
-			return fmt.Errorf("Unable to get %s lock: %s", PATH_NEXT_JOB, err.Error())
+			return fmt.Errorf("Unable to get %s lock: %s", PATH_JOBLOCK, err.Error())
 		}
-		log.Trace.Printf("Taking %s lock", PATH_NEXT_JOB)
+		log.Trace.Printf("Taking %s lock", PATH_JOBLOCK)
 		hasLock = true
 	}
 	return nil
@@ -151,9 +152,9 @@ func getJobsLock() error {
 // Release the lock if we have it
 func releaseJobsLock() error {
 	if hasLock {
-		log.Trace.Printf("Releasing %s lock", PATH_NEXT_JOB)
+		log.Trace.Printf("Releasing %s lock", PATH_JOBLOCK)
 		if err := lock.Unlock(); err != nil {
-			return fmt.Errorf("Unable to release %s lock: %s", PATH_NEXT_JOB, err.Error())
+			return fmt.Errorf("Unable to release %s lock: %s", PATH_JOBLOCK, err.Error())
 		}
 		hasLock = false
 	}

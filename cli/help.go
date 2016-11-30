@@ -31,7 +31,7 @@ func HelpCommand(args []string) error {
 			"  -d\tProvide TRACE logging\n" +
 			"  -zk\tComma-separated list of Zookeeper server(s) in form host:port (defaults to ZOOKEEPER_SERVERS)\n" +
 			"  -zt\tZookeeper session timeout\n" +
-			"  name\tName of job to list; can be omitted to list all jobs\n")
+			"  name\tName of job to list; can be omitted to list all jobs or contain \"*\" as a wildcard match\n")
 
 	case "sched":
 		fmt.Printf("Job schedule; must be a quoted string containing 5 -7 blank-separated values.\n\n" +

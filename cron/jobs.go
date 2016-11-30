@@ -1,6 +1,8 @@
 package cron
 
 import (
+	"regexp"
+	"strings"
 	"bytes"
 	"encoding/gob"
 	"fmt"
@@ -55,6 +57,13 @@ func Deserialize(b []byte) (job *Job, e error) {
 func ListJobs(name string) (jobs []*Job, e error) {
 	jobs = []*Job{}
 	jobnames := []string{name}
+	var rxJobnames *regexp.Regexp
+	if strings.Index(name, "*") != -1 {
+		if rxJobnames, e = regexp.Compile(strings.Replace(name, "*", ".*", -1)); e != nil {
+			return nil, fmt.Errorf("Invalid jobname mask: %s", e.Error())
+		}
+		name = ""
+	}
 	if name == "" {
 		// Empty name means list all jobs
 		if jobnames, _, e = zkConn.Children(PATH_JOBS); e != nil {
@@ -63,12 +72,14 @@ func ListJobs(name string) (jobs []*Job, e error) {
 		sort.Strings(jobnames)
 	}
 	for _, jobname := range jobnames {
-		if b, _, err := zkConn.Get(fmt.Sprintf("%s/%s", PATH_JOBS, jobname)); err != nil {
-			return nil, fmt.Errorf("Can't fetch job %s: %s", jobname, err.Error())
-		} else if job, err := Deserialize(b); err != nil {
-			return nil, err
-		} else {
-			jobs = append(jobs, job)
+		if rxJobnames == nil || rxJobnames.MatchString(jobname) {
+			if b, _, err := zkConn.Get(fmt.Sprintf("%s/%s", PATH_JOBS, jobname)); err != nil {
+				return nil, fmt.Errorf("Can't fetch job %s: %s", jobname, err.Error())
+			} else if job, err := Deserialize(b); err != nil {
+				return nil, err
+			} else {
+				jobs = append(jobs, job)
+			}  
 		}
 	}
 	return
@@ -93,7 +104,6 @@ func (job *Job) SetNextRuntime() (changed bool, e error) {
 		return false, fmt.Errorf("Invalid schedule string \"%s\" for job %s: %s", job.Schedule, job.Name, err.Error())
 	} else {
 		job.NextRuntime = cronSchedule.Next(time.Now())
-		log.Info.Printf("Job %s next run time %s", job.Name, job.NextRuntime.Format("2006-01-02 15:04:05.99999999"))
 	}
 	return currNextRuntime != job.NextRuntime, nil
 }

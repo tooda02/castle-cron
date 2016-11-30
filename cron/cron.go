@@ -35,6 +35,10 @@ func Init(server string, timeout int) (e error) {
 		zks := strings.Split(server, ",")
 		if zkConn, _, e = zk.Connect(zks, time.Duration(timeout)*time.Second); e == nil {
 			log.Trace.Printf("Zookeeper connection %#v", zkConn)
+			createIfNecessary(PATH_JOBS)
+			createIfNecessary(PATH_NEXT_JOB)
+			createIfNecessary(PATH_SERVERS)
+			lock = zk.NewLock(zkConn, PATH_JOBLOCK, zk.WorldACL(zk.PermAll))
 		}
 	}
 	return
@@ -55,18 +59,13 @@ func Run(name string, force bool) {
 	if err := setServerName(name, force); err != nil {
 		log.Error.Fatalf("Unable to set server name: %s", err.Error())
 	}
-	reportServers()
 	isRunning = true
-	for isRunning {
-		runNextJob()
-		log.Info.Printf("castle-cron server %s still running", serverName)
-		time.Sleep(time.Duration(10) * time.Second)
-	}
+	reportServers()
+	runJobs()
 }
 
 // Create Zookeeper znode /servers/<serverName>
 func setServerName(name string, force bool) error {
-	createIfNecessary(PATH_SERVERS)
 	if name == "" {
 		serverName = hostname
 	} else {
