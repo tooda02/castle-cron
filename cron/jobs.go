@@ -18,7 +18,7 @@ type Job struct {
 	Args        []string  // Command arguments
 	HasError    bool      // Job has an error - do not run
 	NextRuntime time.Time // Time of next execution
-	schedule    string    // cron-type schedule string - see below
+	Schedule    string    // cron-type schedule string - see below
 	/*
 		Field name     Mandatory?   Allowed values    Allowed special characters
 		----------     ----------   --------------    --------------------------
@@ -64,8 +64,8 @@ func (job *Job) Run() {
 // Calculate the next runtime of a job using its cron-style schedule
 func (job *Job) SetNextRuntime() (changed bool, e error) {
 	currNextRuntime := job.NextRuntime
-	if cronSchedule, err := cronexpr.Parse(job.schedule); err != nil {
-		return false, fmt.Errorf("Invalid schedule string \"%s\" for job %s: %s", job.schedule, job.Name, err.Error())
+	if cronSchedule, err := cronexpr.Parse(job.Schedule); err != nil {
+		return false, fmt.Errorf("Invalid schedule string \"%s\" for job %s: %s", job.Schedule, job.Name, err.Error())
 	} else {
 		job.NextRuntime = cronSchedule.Next(time.Now())
 		log.Info.Printf("Job %s next run time %s", job.Name, job.NextRuntime.Format("2006-01-02 15:04:05.99999999"))
