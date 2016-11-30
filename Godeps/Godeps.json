@@ -1,0 +1,25 @@
+{
+	"ImportPath": "github.com/tooda02/castle-cron",
+	"GoVersion": "go1.7",
+	"GodepVersion": "v75",
+	"Deps": [
+		{
+			"ImportPath": "github.com/daviddengcn/go-colortext",
+			"Rev": "b5c0891944c2f150ccc9d02aecf51b76c14c2948"
+		},
+		{
+			"ImportPath": "github.com/gorhill/cronexpr",
+			"Comment": "1.0.0-3-gf098431",
+			"Rev": "f0984319b44273e83de132089ae42b1810f4933b"
+		},
+		{
+			"ImportPath": "github.com/ryanuber/columnize",
+			"Comment": "v2.1.0-9-g6f43af5",
+			"Rev": "6f43af5ecd2928c6fef2b4f35ef6f36f96690390"
+		},
+		{
+			"ImportPath": "github.com/samuel/go-zookeeper/zk",
+			"Rev": "177002e16a0061912f02377e2dd8951a8b3551bc"
+		}
+	]
+}
