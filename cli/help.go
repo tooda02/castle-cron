@@ -1,16 +1,11 @@
 package cli
 
 import (
-	"flag"
 	"fmt"
-
-	//"github.com/gorhill/cronexpr"
-
-	//log "github.com/tooda02/castle-cron/logging"
 )
 
-func HelpCommand() error {
-	switch flag.Arg(1) {
+func HelpCommand(args []string) error {
+	switch args[1] {
 	case "add":
 		fmt.Printf("castle-cron [-d] [-zk server:port] [-zt timeout] add name \"sched\" cmd [args...]\n\n" +
 			"Add a new job to the schedule\n" +
@@ -61,5 +56,5 @@ func HelpCommand() error {
 			"  cmd\tCommand to run\n" +
 			"  args\tCommand arguments\n")
 	}
-	return fmt.Errorf("Unknown command \"%s\"; must be add, del, list, sched, or upd", flag.Arg(1))
+	return fmt.Errorf("Unknown command \"%s\"; must be add, del, list, sched, or upd", args[1])
 }

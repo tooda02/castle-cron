@@ -5,6 +5,7 @@ import (
 	"encoding/gob"
 	"fmt"
 	"os/exec"
+	"sort"
 	"time"
 
 	"github.com/gorhill/cronexpr"
@@ -34,6 +35,7 @@ type Job struct {
 	*/
 }
 
+// Deserialize a byte array into a Job struct
 func Deserialize(b []byte) (job *Job, e error) {
 	job = &Job{}
 	if b == nil || len(b) == 0 {
@@ -44,6 +46,29 @@ func Deserialize(b []byte) (job *Job, e error) {
 		decoder := gob.NewDecoder(buffer)
 		if err := decoder.Decode(&job); err != nil {
 			e = fmt.Errorf("Unable to decode job: %s", err.Error())
+		}
+	}
+	return
+}
+
+// Get a job or a list of jobs from Zookeeper
+func ListJobs(name string) (jobs []*Job, e error) {
+	jobs = []*Job{}
+	jobnames := []string{name}
+	if name == "" {
+		// Empty name means list all jobs
+		if jobnames, _, e = zkConn.Children(PATH_JOBS); e != nil {
+			return nil, fmt.Errorf("Unable to retrieve job list: %s", e.Error())
+		}
+		sort.Strings(jobnames)
+	}
+	for _, jobname := range jobnames {
+		if b, _, err := zkConn.Get(fmt.Sprintf("%s/%s", PATH_JOBS, jobname)); err != nil {
+			return nil, fmt.Errorf("Can't fetch job %s: %s", jobname, err.Error())
+		} else if job, err := Deserialize(b); err != nil {
+			return nil, err
+		} else {
+			jobs = append(jobs, job)
 		}
 	}
 	return
@@ -88,8 +113,8 @@ func (job *Job) Serialize() (b []byte, e error) {
 // Update job in znode /jobs/<jobname>
 func (job *Job) UpdateZk() (e error) {
 	if !hasLock {
-		if err := getJobsLock(); err != nil {
-			return err
+		if e = getJobsLock(); e != nil {
+			return
 		}
 		defer releaseJobsLock()
 	}
@@ -104,15 +129,29 @@ func (job *Job) UpdateZk() (e error) {
 // Write new job to znode /jobs/<jobname>
 func (job *Job) WriteToZk() (e error) {
 	if !hasLock {
-		if err := getJobsLock(); err != nil {
-			return err
+		if e = getJobsLock(); e != nil {
+			return
 		}
 		defer releaseJobsLock()
 	}
 	if b, err := job.Serialize(); err != nil {
 		e = err
 	} else if _, err = zkConn.Create(fmt.Sprintf("%s/%s", PATH_JOBS, job.Name), b, 0x0, zk.WorldACL(zk.PermAll)); err != nil {
-		e = fmt.Errorf("Unable to write job %s: %s", job.Name, err.Error())
+		e = fmt.Errorf("Unable to create job %s: %s", job.Name, err.Error())
+	}
+	return
+}
+
+// Delete job from znode /jobs/<jobname>
+func (job *Job) DeleteFromZk() (e error) {
+	if !hasLock {
+		if e = getJobsLock(); e != nil {
+			return
+		}
+		defer releaseJobsLock()
+	}
+	if e = zkConn.Delete(fmt.Sprintf("%s/%s", PATH_JOBS, job.Name), -1); e != nil {
+		e = fmt.Errorf("Unable to delete job %s: %s", job.Name, e.Error())
 	}
 	return
 }

@@ -61,17 +61,20 @@ func main() {
 
 	// Connect to Zookeeper and initialize for this run
 
-	if e := cron.Init(zkServer, zkTimeout); e != nil {
-		log.Error.Fatalf("Unable to connect to Zookeeper: %s", e.Error())
+	if err := cron.Init(zkServer, zkTimeout); err != nil {
+		log.Error.Fatalf("Unable to connect to Zookeeper: %s", err.Error())
 	} else {
 		defer cron.Stop()
 		log.Info.Printf("Connected to Zookeeper server %s with session timeout %d seconds", zkServer, zkTimeout)
 	}
 
-	// If non-flag arguments were specified, maintain the jobs list
+	// If non-flag arguments were specified, execute the CLI command
 
 	if flag.NArg() > 0 {
-		cli.RunCommand()
+		if err := cli.RunCommand(flag.Args()); err != nil {
+			log.Error.Printf(err.Error())
+			os.Exit(1)
+		}
 	}
 
 	// If -s was specified, run a castle-cron server
