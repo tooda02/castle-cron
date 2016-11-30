@@ -115,7 +115,7 @@ func printJobs(jobs []*cron.Job) {
 		}
 		output = append(output,
 			job.Name+" | "+
-				job.NextRuntime.Format("2006-01-02 15:04:05.99999999")+" | "+
+				job.FmtNextRuntime()+" | "+
 				errFlag+" | "+
 				job.Cmd+" "+strings.Join(job.Args, " "))
 	}

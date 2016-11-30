@@ -15,6 +15,10 @@ import (
 	log "github.com/tooda02/castle-cron/logging"
 )
 
+const (
+	NULL_JOBNAME = "(null)"
+)
+
 type Job struct {
 	Name        string    // Name of this job
 	Cmd         string    // Command to run
@@ -42,12 +46,16 @@ func Deserialize(b []byte) (job *Job, e error) {
 	job = &Job{}
 	if b == nil || len(b) == 0 {
 		// Ensure null job isn't scheduled
+		job.Name = NULL_JOBNAME
 		job.NextRuntime = time.Now().Add(time.Duration(24) * time.Hour)
 	} else {
 		buffer := bytes.NewBuffer(b)
 		decoder := gob.NewDecoder(buffer)
 		if err := decoder.Decode(&job); err != nil {
-			e = fmt.Errorf("Unable to decode job: %s", err.Error())
+			log.Error.LogStackTrace(fmt.Sprintf("Unable to deserialize job: %s", err.Error()), true, 10)
+			job = &Job{}
+			job.Name = NULL_JOBNAME
+			job.NextRuntime = time.Now().Add(time.Duration(24) * time.Hour)
 		}
 	}
 	return
@@ -108,6 +116,11 @@ func (job *Job) SetNextRuntime() (changed bool, e error) {
 	return currNextRuntime != job.NextRuntime, nil
 }
 
+// Return a nicely-formatted runtime
+func (job *Job) FmtNextRuntime() string {
+	return job.NextRuntime.Format("2006-01-02 15:04:05.99999999")
+}
+
 // Serialize a job into a byte array
 func (job *Job) Serialize() (b []byte, e error) {
 	var buffer bytes.Buffer
@@ -132,6 +145,34 @@ func (job *Job) UpdateZk() (e error) {
 		e = err
 	} else if _, err = zkConn.Set(fmt.Sprintf("%s/%s", PATH_JOBS, job.Name), b, -1); err != nil {
 		e = fmt.Errorf("Unable to update job %s: %s", job.Name, err.Error())
+	} else {
+		e = checkForNextjobUpdate(job)
+	}
+	return
+}
+
+// Update job in znode /nextjob
+func (job *Job) UpdateZkNextjob() (e error) {
+	if !hasLock {
+		if e = getJobsLock(); e != nil {
+			return
+		}
+		defer releaseJobsLock()
+	}
+	if b, err := job.Serialize(); err != nil {
+		e = err
+	} else {
+		exists, _, err := zkConn.Exists(PATH_NEXT_JOB)
+		if err == nil {
+			if exists {
+				_, err = zkConn.Set(PATH_NEXT_JOB, b, -1)
+			} else {
+				_, err = zkConn.Create(PATH_NEXT_JOB, b, -1, zk.WorldACL(zk.PermAll))
+			}
+		}
+		if err != nil {
+			e = fmt.Errorf("Unable to set nextjob to %s: %s", job.Name, err.Error())
+		}
 	}
 	return
 }
@@ -148,6 +189,8 @@ func (job *Job) WriteToZk() (e error) {
 		e = err
 	} else if _, err = zkConn.Create(fmt.Sprintf("%s/%s", PATH_JOBS, job.Name), b, 0x0, zk.WorldACL(zk.PermAll)); err != nil {
 		e = fmt.Errorf("Unable to create job %s: %s", job.Name, err.Error())
+	} else {
+		e = checkForNextjobUpdate(job)
 	}
 	return
 }
@@ -162,6 +205,9 @@ func (job *Job) DeleteFromZk() (e error) {
 	}
 	if e = zkConn.Delete(fmt.Sprintf("%s/%s", PATH_JOBS, job.Name), -1); e != nil {
 		e = fmt.Errorf("Unable to delete job %s: %s", job.Name, e.Error())
+	} else {
+		job.HasError = true // Mark job as deleted
+		e = checkForNextjobUpdate(job)
 	}
 	return
 }

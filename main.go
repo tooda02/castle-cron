@@ -79,7 +79,11 @@ func main() {
 
 	// If -s was specified, run a castle-cron server
 	if *isServer {
-		cron.Run(name, *force)
+		if err := cron.Run(name, *force); err != nil {
+			log.Error.Printf("Server terminated with error: %s", err.Error())
+		} else {
+			log.Info.Printf("Server terminated normally")
+		}
 	}
 }
 

@@ -8,12 +8,6 @@ import (
 	log "github.com/tooda02/castle-cron/logging"
 )
 
-const (
-	PATH_JOBS     = "/jobs"
-	PATH_NEXT_JOB = "/nextjob"
-	PATH_JOBLOCK = "/joblock"
-)
-
 var (
 	lock *zk.Lock // Lock for /jobs
 	hasLock bool  // true => We have acquired the lock
@@ -31,7 +25,13 @@ Schedule and run jobs.  We do the following:
 6. Determine the next job to schedule and update /nextjob
 7. Release the lock and return to step 1.
 */
-func runJobs() error {
+func Run(name string, force bool) (e error) {
+	if e = setServerName(name, force); e != nil {
+		return fmt.Errorf("Unable to set server name: %s", e.Error())
+	}
+	reportServers()
+	
+	isRunning = true
 	for isRunning {
 
 		// 1. Retrieve the next scheduled job.  This is always in /nextjob
@@ -52,6 +52,7 @@ func runJobs() error {
 		//    execution time or an update to the schedule for the next job.
 
 		if job.NextRuntime.After(now) {
+			log.Trace.Printf("Sleeping until job %s schedule start of %s", job.Name, job.FmtNextRuntime())
 			if err = releaseJobsLock(); err != nil {
 				return err
 			}
@@ -60,8 +61,10 @@ func runJobs() error {
 				if evt.Err != nil {
 					return fmt.Errorf("Error from %s update event: %s", PATH_NEXT_JOB, evt.Err.Error())
 				}
+				log.Trace.Printf("Got notification of nextjob update event - checking schedule")
 
 			case <-time.After(job.NextRuntime.Sub(now)):
+			log.Trace.Printf("Wait time expired - checking schedule")
 			}
 			continue
 		}
@@ -92,6 +95,46 @@ func runJobs() error {
 	return nil
 }
 
+// Check whether a job just added, updated, or deleted affects nextjob
+// The caller must take the lock before calling this function
+func checkForNextjobUpdate(job *Job) (e error) {
+	newScheduleNeeded := false // Set when user deletes currently scheduled job
+	if b, _, err := zkConn.Get(PATH_NEXT_JOB); err != nil {
+		return fmt.Errorf("Unable to check schedule after job update: %s", err.Error())
+	} else if nextjob, err := Deserialize(b); err != nil {
+		return err
+	} else if nextjob.Name == NULL_JOBNAME {		
+		// Schedule is currently empty - add the job we just created
+		
+		if job.HasError {
+			// Uh-oh - nothing in the schedule and we just deleted a job
+			// This shouldn't ever happen; log an error and treat as first-time schedule
+			log.Error.Printf("Job delete succeeded, but schedule is currently empty")
+			newScheduleNeeded = true
+		} else if err := job.UpdateZkNextjob(); err != nil {
+			return err
+		} else {
+			log.Trace.Printf("Scheduled first job %s to start at %s", job.Name, job.FmtNextRuntime())
+		}
+	} else if nextjob.Name != job.Name {
+		log.Trace.Printf("Next scheduled job %s unchanged by update; will run at %s", nextjob.Name, nextjob.FmtNextRuntime())
+	} else if job.HasError {
+		log.Trace.Printf("Next scheduled job %s deleted by update")
+		newScheduleNeeded = true
+	} else if err := job.UpdateZkNextjob(); err != nil {
+		return err
+	} else {
+		log.Trace.Printf("Updated currently scheduled job %s to start at %s", job.Name, job.FmtNextRuntime())
+	}
+	
+	// If user deleted the currently scheduled job, refresh it
+	
+	if newScheduleNeeded {
+		e = setNextjob()
+	}
+	return
+}
+
 // Reschedule current job and set the next scheduled job in /jobsnext
 // This function releases the /jobs lock; the caller is responsible for obtaining it.
 func updateSchedule(job *Job) error {
@@ -108,32 +151,41 @@ func updateSchedule(job *Job) error {
 	} else if err = job.UpdateZk(); err != nil {
 		return err
 	} else {
-		log.Info.Printf("Job %s next run time %s", job.Name, job.NextRuntime.Format("2006-01-02 15:04:05.99999999"))
+		log.Info.Printf("Job %s next run time %s", job.Name, job.FmtNextRuntime())
 	}
 
-	// Determine runtime of the next job in the schedule and update /jobsnext
+	if err := setNextjob(); err != nil {
+		return err
+	}
 
+	return releaseJobsLock() // Explicit unlock to ensure logging of any error
+}
+
+// Scan all jobs and save the next to run in /nextjobs.  
+// The caller must acquire the lock prior to calling this function
+func setNextjob() error {
 	if jobs, _, err := zkConn.Children(PATH_JOBS); err != nil {
 		return fmt.Errorf("Unable to get list of jobs to calculate schedule: %s", err.Error())
 	} else {
-		nextRuntime := job.NextRuntime
+		var job *Job
 		for _, jobName := range jobs {
 			if jobData, _, err := zkConn.Get(fmt.Sprintf("%s/%s", PATH_JOBS, jobName)); err != nil {
 				return err
 			} else if job2, err := Deserialize(jobData); err != nil {
 				return err
-			} else if job2.NextRuntime.Before(nextRuntime) && !job.HasError {
+			} else if job == nil || (job.NextRuntime.After(job2.NextRuntime) && !job2.HasError) {
 				job = job2
 			}
 		}
-		if jobData, err := job.Serialize(); err != nil {
+		if job == nil {
+			log.Warning.Printf("There are no jobs remaining to schedule")
+		} else if jobData, err := job.Serialize(); err != nil {
 			return err
 		} else if _, err = zkConn.Set(PATH_NEXT_JOB, jobData, -1); err != nil {
 			return fmt.Errorf("Unable to update schedule to run next job %s: %s", job.Name, err.Error())
 		}
 	}
-
-	return releaseJobsLock() // Explicit unlock to ensure logging of any error
+	return nil
 }
 
 // Grab the lock if we don't already have it

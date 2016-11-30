@@ -1,3 +1,7 @@
+/*
+Package cron supports a distributed cluster for running scheduled jobs.
+This package supports both the server and a CLI for maintaining the schedule.
+*/
 package cron
 
 import (
@@ -11,22 +15,27 @@ import (
 	log "github.com/tooda02/castle-cron/logging"
 )
 
+// Zookeeper nodes used by this application
 const (
-	PATH_SERVERS = "/servers"
-	APP_NAME     = "castle-cron"
+	APP_NAME      = "castle-cron"
+	NAMESPACE     = "/" + APP_NAME         // Root node; can be set to empty string if desired
+	PATH_SERVERS  = NAMESPACE + "/servers" // Root of ephemeral nodes for each server
+	PATH_JOBS     = NAMESPACE + "/jobs"    // Root of nodes for each job
+	PATH_NEXT_JOB = NAMESPACE + "/nextjob" // Single node holding next job to run
+	PATH_JOBLOCK  = NAMESPACE + "/joblock" // Single node holding lock
 )
 
 var (
-	zkConn     *zk.Conn
-	hostname   string
-	serverName string
-	isRunning  bool // Server is running
+	zkConn     *zk.Conn // Zookeeper connection for both server and CLI
+	hostname   string   // hostname (set for server only)
+	serverName string   // server name (set for server only; defaults to hostname)
+	isRunning  bool     // Server is running
 )
 
 // Connect to Zookeeper
 func Init(server string, timeout int) (e error) {
 	if zkConn != nil {
-		e = fmt.Errorf("cron Init called more than once")
+		e = fmt.Errorf("cron Init() called more than once")
 	} else {
 		if hostname, e = os.Hostname(); e != nil {
 			hostname = fmt.Sprintf("unknown-%d", os.Getpid())
@@ -35,9 +44,11 @@ func Init(server string, timeout int) (e error) {
 		zks := strings.Split(server, ",")
 		if zkConn, _, e = zk.Connect(zks, time.Duration(timeout)*time.Second); e == nil {
 			log.Trace.Printf("Zookeeper connection %#v", zkConn)
+			createIfNecessary(NAMESPACE)
 			createIfNecessary(PATH_JOBS)
 			createIfNecessary(PATH_NEXT_JOB)
 			createIfNecessary(PATH_SERVERS)
+			createIfNecessary(PATH_JOBLOCK)
 			lock = zk.NewLock(zkConn, PATH_JOBLOCK, zk.WorldACL(zk.PermAll))
 		}
 	}
@@ -51,17 +62,8 @@ func Stop() {
 	} else {
 		zkConn.Close()
 		zkConn = nil
+		log.Trace.Printf("Closed Zookeeper connection")
 	}
-}
-
-// Run castle-cron server daemon
-func Run(name string, force bool) {
-	if err := setServerName(name, force); err != nil {
-		log.Error.Fatalf("Unable to set server name: %s", err.Error())
-	}
-	isRunning = true
-	reportServers()
-	runJobs()
 }
 
 // Create Zookeeper znode /servers/<serverName>
@@ -155,11 +157,13 @@ func reportServers() error {
 
 // Check whether a specified znode exists and create if it does not
 func createIfNecessary(znode string) {
-	if exists, _, err := zkConn.Exists(znode); err != nil {
-		log.Error.Fatalf("Unable to check for %s: %s", znode, err.Error())
-	} else if !exists {
-		if _, err = zkConn.Create(znode, []byte{}, 0x0, zk.WorldACL(zk.PermAll)); err != nil {
-			log.Error.Fatalf("Unable to create %s: %s", znode, err.Error())
+	if znode != "" {
+		if exists, _, err := zkConn.Exists(znode); err != nil {
+			log.Error.Fatalf("Unable to check for %s: %s", znode, err.Error())
+		} else if !exists {
+			if _, err = zkConn.Create(znode, []byte{}, 0x0, zk.WorldACL(zk.PermAll)); err != nil {
+				log.Error.Fatalf("Unable to create %s: %s", znode, err.Error())
+			}
 		}
 	}
 }
