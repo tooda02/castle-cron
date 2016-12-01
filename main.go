@@ -18,7 +18,7 @@ const (
 )
 
 var (
-	debug     *bool                // true => TRACE logging on
+	verbose   *bool                // true => TRACE logging on
 	isServer  *bool                // true => start server daemon
 	force     *bool                // true => force setup even if server already active
 	help      *bool                // true => print usage and exit
@@ -28,11 +28,11 @@ var (
 )
 
 func init() {
-	debug = flag.Bool("d", false, "Provide TRACE logging")
-	help = flag.Bool("h", false, "Print help and exit")
-	isServer = flag.Bool("s", false, "Run as a castle-cron server daemon")
 	force = flag.Bool("f", false, "Force running server even if server of that name is already active")
+	help = flag.Bool("h", false, "Print help and exit")
 	flag.StringVar(&name, "n", "", "Name of server when -s specified (default %h); %h->hostname; %p->pid")
+	isServer = flag.Bool("s", false, "Run as a castle-cron server daemon")
+	verbose = flag.Bool("v", false, "Provide TRACE logging")
 	flag.StringVar(&zkServer, "zk", "ZOOKEEPER_SERVERS", "Comma-separated list of Zookeeper server(s) in form host:port")
 	flag.IntVar(&zkTimeout, "zt", DEFAULT_ZK_TIMEOUT, "Zookeeper session timeout in seconds")
 }
@@ -51,7 +51,7 @@ func main() {
 	if *help || (flag.NArg() == 1 && flag.Arg(0) == "help") {
 		usage(0)
 	}
-	log.SetDebug(*debug)
+	log.SetDebug(*verbose)
 	overrideFromEnv(&zkServer, "ZOOKEEPER_SERVERS")
 	log.Trace.Printf("s(%t) zk(%s) zt(%d)", isServer, zkServer, zkTimeout)
 	if zkServer == "" {

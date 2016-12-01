@@ -34,7 +34,7 @@ func HelpCommand(args []string) error {
 			"  name\tName of job to list; can be omitted to list all jobs or contain \"*\" as a wildcard match\n")
 
 	case "sched":
-		fmt.Printf("Job schedule; must be a quoted string containing 5 -7 blank-separated values.\n\n" +
+		fmt.Printf("Job schedule; must be a quoted string containing 5 - 7 blank-separated values.\n\n" +
 			"  Field name\tMandatory?\tAllowed values\tAllowed special characters\n" +
 			"  ----------\t----------\t--------------\t--------------------------\n" +
 			"  Seconds\tNo\t\t0-59\t\t* / , -\n" +
@@ -55,6 +55,8 @@ func HelpCommand(args []string) error {
 			"  sched\tcron-like blank-separated schedule string; see help sched for details\n" +
 			"  cmd\tCommand to run\n" +
 			"  args\tCommand arguments\n")
+	default:
+		return fmt.Errorf("Unknown command \"%s\"; must be add, del, list, sched, or upd", args[1])
 	}
-	return fmt.Errorf("Unknown command \"%s\"; must be add, del, list, sched, or upd", args[1])
+	return nil
 }

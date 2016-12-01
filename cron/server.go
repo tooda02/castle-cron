@@ -116,15 +116,20 @@ func checkForNextjobUpdate(job *Job) (e error) {
 		} else {
 			log.Trace.Printf("Scheduled first job %s to start at %s", job.Name, job.FmtNextRuntime())
 		}
-	} else if nextjob.Name != job.Name {
-		log.Trace.Printf("Next scheduled job %s unchanged by update; will run at %s", nextjob.Name, nextjob.FmtNextRuntime())
 	} else if job.HasError {
-		log.Trace.Printf("Next scheduled job %s deleted by update")
-		newScheduleNeeded = true
-	} else if err := job.UpdateZkNextjob(); err != nil {
-		return err
-	} else {
-		log.Trace.Printf("Updated currently scheduled job %s to start at %s", job.Name, job.FmtNextRuntime())
+		// User is deleting a job.  If it's the currently scheduled job, we need to reset the schedule.
+		if job.Name == nextjob.Name {
+			log.Trace.Printf("Next scheduled job %s deleted by update")
+			newScheduleNeeded = true
+		}
+	} else if job.Name == nextjob.Name || job.NextRuntime.Before(nextjob.NextRuntime) {
+		// User has either updated the currently scheduled job, or created a new one that
+		// has an earlier runtime.  In either case, we need to update /nextjob with the new one.
+		if err := job.UpdateZkNextjob(); err != nil {
+			return err
+		} else {
+			log.Trace.Printf("Updated currently scheduled job %s to start at %s", job.Name, job.FmtNextRuntime())
+		}
 	}
 	
 	// If user deleted the currently scheduled job, refresh it
