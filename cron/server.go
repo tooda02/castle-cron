@@ -154,7 +154,7 @@ func updateSchedule(job *Job) error {
 		log.Error.Printf("Attempt to reschedule job %s failed as no new run time available", job.Name)
 		job.HasError = true
 	} else if err = job.UpdateZk(); err != nil {
-		return err
+		log.Error.Printf(err.Error())
 	} else {
 		log.Info.Printf("Job %s next run time %s", job.Name, job.FmtNextRuntime())
 	}
@@ -184,6 +184,7 @@ func setNextjob() error {
 		}
 		if job == nil {
 			log.Warning.Printf("There are no jobs remaining to schedule")
+			zkConn.Set(PATH_NEXT_JOB, nil, -1)
 		} else if jobData, err := job.Serialize(); err != nil {
 			return err
 		} else if _, err = zkConn.Set(PATH_NEXT_JOB, jobData, -1); err != nil {
