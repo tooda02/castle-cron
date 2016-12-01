@@ -22,26 +22,26 @@ When a server starts, it does the following:
 1. Connects to Zookeeper and creates a `/servers/servername` znode.
 2. Starts a goroutine that reads the children of `/servers` and reports on all running servers.  In addition, it sets a watch and reports when a server enters or leaves the cluster.
 3. Retrieves the Job stored in `/nextjobs` and sets a watch.
-4. If the job's scheduled time is in the future, it sets a timer expiring at that time.  It then wait for either timer expiration or a watch event on the job in `/nextjobs`, returning to step 3 when either event occurs.
+4. If the job's scheduled time is in the future, it sets a timer expiring at that time.  It then waits for either timer expiration or a watch event on the job in `/nextjobs`, returning to step 3 when either event occurs.
 5. If the job is ready to run, but the server does not hold the lock, it requests the lock.
-6. When the lock is granted, retrieves `/nextjob` again, as it may have changed during the wait.  If it is no longer ready to run, releases the lock and returns to  step 3.
-7. If the job is ready to run and the server holds the lock, it starts the job in a goroutine, so it executes asynchronously.
+6. When the lock is granted, the server retrieves `/nextjob` again, as it may have changed during the wait.  If it is no longer ready to run, the server releases the lock and returns to  step 3.
+7. If the job is ready to run and the server holds the lock, it starts the job in a goroutine, so that it executes asynchronously.
 8. Determines the next job to schedule and updates `/nextjob`
 9. Releases the lock and return to step 3.
 
-When there are multiple servers, they will all retrieve the same `/nextjob` and request the lock at the same time.  However, only one will successfully obtain the lock.  That server starts the job, updates `/nextjob`, and releases the lock.  The other servers will fetch the new `/nextjob` and set a fresh timer.  Meanwhile, the job executes in a goroutine on the original server.
+When there are multiple servers, they will all retrieve the same `/nextjob` and request the lock at the same time.  However, only one will successfully obtain the lock.  That server starts the job, updates `/nextjob`, and releases the lock.  The other servers fetch the new `/nextjob` and set a fresh timer.  Meanwhile, the job executes in a goroutine on the original server.
 
 ### CLI Operation
 The CLI allows a user to add, update, or delete a job.  Any of these operations could affect the schedule, so the CLI retrieves the current `/nextjob` and does the following:
 
-* If there is no /nextjob (data at the znone is empty), this must be a new system, so the newly added job becomes `/nextjob`.
+* If there is no /nextjob (data at the znode is empty), this must be a new system, so the newly added job becomes `/nextjob`.
 * If this is a delete operation to the current `/nextjob`, replace it with the next job to schedule.
 * If this is an update operation to the current `/nextjob`, or the updated job has an earlier start time than the current `/nextjob`, replace `/nextjob` with the newly added job.
 
 All servers have an active watch on `/nextjob`, so any change to it causes them to wake up and reset their schedule.
 
 ### The Job Struct
-**Job** is the struct that castle-cron uses to maintain job information.  All jobs must have a unique name. castle-cron stores job information in znode /jobs/jobname and in addition stores a copy of the job next on the schedule in znode /nextjob.  The Job struct contains the following:
+**Job** is the struct that castle-cron uses to maintain job information.  All jobs must have a unique name. castle-cron stores job information in znode `/jobs/jobname` and in addition stores a copy of the job next on the schedule in znode `/nextjob`.  The Job struct contains the following:
 
 Field | Type | Significance
 ----- | ---- | ------------ 

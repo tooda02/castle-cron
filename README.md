@@ -10,9 +10,9 @@ There is one executable that supports both the CLI and the server, depending on 
 
     castle-cron -s [-zk Zookeeper server(s)] [-zt timeout] [-n name] [-f] [-v]
 
-Invokes castle-cron as a server daemon logging to the console.  It connects to the designated Zookeeper server and waits for the scheduled start time of the next job (or for a schedule change).  Once the scheduled time arrives, it competes with other servers for the right to run the job, and if successful, runs the job.  It then returns to the wait.
+Invokes castle-cron as a server daemon logging to the console.  It connects to the designated Zookeeper server and waits for the scheduled start time of the next job or for a schedule change.  Once the scheduled time arrives, it competes with other servers for the right to run the job, and if successful, runs the job.  It then returns to the wait.
 
-You can start any number of castle-cron servers.  Each server's console log reports when other servers arrive into or depart from the cluster.  Scheduled jobs are assign to a server at random from the servers available at the time the job runs.
+You can start any number of castle-cron servers.  Each server's console log reports when other servers enter or depart the cluster.  Scheduled jobs are assigned to a server at random from the servers available at the time the job runs.
 
 Argument | Default | Significance
 -------- | ------- | ------------
@@ -20,7 +20,7 @@ Argument | Default | Significance
 -zk | ZOOKEEPER_SERVERS | Optional; if omitted, the value must be supplied in the ZOOKEEPER_SERVERS environment variable.  Specifies a comma-separated list of servers in the form *hostname:port[,hostname:port...]*
 -zt | 10 | Zookeeper timeout.  Specifies the number of seconds of non-contact before a session times out.
 -n | *hostname* | Server name.  Can include %h (hostname) and %p (pid).
--f | | Force start.  Starts the server even if its name duplicates another server.
+-f | | Force start.  Start the server even if its name duplicates another server.
 -v | | Verbose.  Include TRACE logging.
 
 #### CLI
